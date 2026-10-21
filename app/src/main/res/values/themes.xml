@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema utama aplikasi mewarisi Theme.MaterialComponents agar kompatibel dengan MaterialButton -->
+    <style name="Theme.AdBlockVPN" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+        <!-- Warna utama (Primary) -->
+        <item name="colorPrimary">@color/purple_500</item>
+        <item name="colorPrimaryVariant">@color/purple_700</item>
+        <item name="colorOnPrimary">@android:color/white</item>
+        
+        <!-- Warna sekunder (Secondary) -->
+        <item name="colorSecondary">@color/teal_200</item>
+        <item name="colorOnSecondary">@android:color/black</item>
+        
+        <!-- Warna status bar -->
+        <item name="android:statusBarColor">#0D0E15</item>
+    </style>
+</resources>

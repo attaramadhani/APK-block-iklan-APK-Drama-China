@@ -1,0 +1,35 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Lingkaran Background Gelap Premium -->
+    <path
+        android:fillColor="#1E1E2E"
+        android:pathData="M54,54m-44,0a44,44 0,1 1,88 0a44,44 0,1 1,-88 0" />
+        
+    <!-- Perisai VPN Utama (Ungu) -->
+    <path
+        android:fillColor="#6200EE"
+        android:pathData="M54,32 L36,38.75 V52.45 C36,63.81 43.67,74.41 54,77 C64.33,74.41 72,63.81 72,52.45 V38.75 L54,32 Z" />
+        
+    <!-- Layer Dalam Perisai (Putih Bersih) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,36 L40,41.25 V52.45 C40,61.54 46.14,70.02 54,72.09 C61.86,70.02 68,61.54 68,52.45 V41.25 L54,36 Z" />
+
+    <!-- Simbol Pemblokir Iklan (Merah) di Tengah Perisai -->
+    <!-- Lingkaran Luar Simbol Blokir -->
+    <path
+        android:strokeColor="#FF3B30"
+        android:strokeWidth="3.5"
+        android:fillColor="#00000000"
+        android:pathData="M54,54m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0" />
+        
+    <!-- Garis Diagonal Simbol Blokir -->
+    <path
+        android:strokeColor="#FF3B30"
+        android:strokeWidth="3.5"
+        android:pathData="M46.9,46.9 L61.1,61.1" />
+</vector>

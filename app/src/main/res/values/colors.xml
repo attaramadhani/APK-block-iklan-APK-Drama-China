@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand colors -->
+    <color name="purple_500">#6200EE</color>
+    <color name="purple_700">#3700B3</color>
+    <color name="teal_200">#03DAC6</color>
+    
+    <!-- Custom UI colors -->
+    <color name="status_active">#4CAF50</color>
+    <color name="status_inactive">#808080</color>
+    <color name="btn_active">#D32F2F</color>
+    <color name="btn_inactive">#6200EE</color>
+</resources>

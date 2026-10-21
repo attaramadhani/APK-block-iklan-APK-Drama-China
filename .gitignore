@@ -1,0 +1,19 @@
+*.iml
+.gradle
+/local.properties
+/.idea/
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Large third-party dumps & target raw APKs (>100MB limit)
+Melolo.apk
+Melolo (1).apk
+Melolo.zip
+melolo_extracted/
+*.log
+dns_logs.txt
+crash_log.txt
