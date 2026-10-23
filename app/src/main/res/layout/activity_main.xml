@@ -340,6 +340,18 @@
                     android:layout_marginTop="12dp" />
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/swVideoGate"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:checked="true"
+                    android:text="🎬 Mode Gerbang Video (Rekomendasi) — di Melolo, tutup SEMUA domain kecuali server video &amp; konten. Aplikasi lain tidak terpengaruh."
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:thumbTint="#FFC107" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
                     android:id="@+id/swAiAuto"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

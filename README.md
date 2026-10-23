@@ -4,6 +4,23 @@ Aplikasi Android berbasis **Local VPN Service** yang berfungsi untuk memblokir i
 
 ---
 
+## 🎬 Mode Gerbang Video (baru, v2.1)
+
+Konsepnya dibalik: **bukan mencari iklan untuk diblokir, tetapi hanya membuka gerbang untuk domain yang menampilkan video.**
+
+- VPN hanya menyaring aplikasi **Melolo** (`com.worldance.drama`). Aplikasi lain di HP tidak terpengaruh.
+- Di dalam Melolo, **semua domain ditutup**, kecuali:
+  - API & login Melolo (`*.tmtreader.com`, `passport`, `tnc`, `ttnet`),
+  - pemberi alamat video (`vod-urls-*.byteintlapi.com`) dan **server video ByteDance** berpola `v16-…`, `v19-…`, `v45-…`,
+  - CDN konten (`*.melolostatic.com`, gambar cover `*-novel-*.ibyteimg.com`, aset statis & paket UI),
+  - pembayaran (`pipopay.com`) dan layanan Google penting (login & notifikasi).
+- Jaringan iklan baru yang belum pernah dikenal pun otomatis tertutup, karena tidak ada di daftar gerbang.
+- Label `ad`, `pangle`, `mon`, `rtlog`, `creative`, dll. selalu ditutup walaupun berada di domain ByteDance.
+
+**Cara pakai:** nyalakan **🎬 Mode Gerbang Video** di *Pengaturan Perlindungan* (aktif secara default), lalu aktifkan AdBlocker. Jika ada video atau gambar yang tidak muncul, buka **Analisis AI**. Domain yang ditutup gerbang tetapi kemungkinan berisi konten diberi tanda ⚠️; tekan **Izinkan** untuk membukanya.
+
+> Jika Melolo tidak terpasang, gerbang dibatalkan otomatis agar internet HP tidak tertutup.
+
 ## 🆕 Yang Baru di Versi 2.0
 
 - **🤖 Asisten AI Pemblokir** — menganalisis setiap domain dan memutuskan mana yang **aman diblokir** dan mana yang **jangan diblokir**:
@@ -104,7 +121,7 @@ Tekan **Matikan AdBlocker** di aplikasi, atau tombol **Matikan AdBlocker** di no
 
 | Masalah | Solusi |
 |---|---|
-| Video / drama tidak bisa diputar atau loading terus | Matikan **Mode Agresif**. Buka **Analisis AI**, cari domain berstatus DIBLOKIR yang terlihat seperti server video (mis. berisi `video`, `vod`, `cdn`) lalu tekan **Izinkan**. |
+| Video / drama tidak bisa diputar atau loading terus | Buka **Analisis AI**, cari domain bertanda ⚠️ atau berstatus *DIBLOKIR (Gerbang Video)* lalu tekan **Izinkan**, kemudian kirimkan hasil **Salin Log** ke pengembang agar domain tersebut ditambahkan ke gerbang. Jika tetap gagal, matikan **Mode Gerbang Video** sementara. Matikan juga **Mode Agresif**. Buka **Analisis AI**, cari domain berstatus DIBLOKIR yang terlihat seperti server video (mis. berisi `video`, `vod`, `cdn`) lalu tekan **Izinkan**. |
 | Iklan masih muncul | Pastikan **DNS Pribadi** mati, pilih cakupan **Global**, tutup paksa Melolo lalu buka lagi. Jika masih muncul, coba nyalakan **Mode Agresif** atau gunakan **Analisis Online**. |
 | Episode "tonton iklan untuk membuka" tidak bisa dibuka | Ini efek dari iklan yang terblokir. Matikan AdBlocker sementara untuk episode tersebut. |
 | Aplikasi lain tidak bisa internetan | Buka **Analisis AI** dan izinkan domain aplikasi tersebut, atau pilih cakupan **Hanya Melolo**. |

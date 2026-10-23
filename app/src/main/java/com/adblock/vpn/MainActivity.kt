@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
                 updateTimerDisplay()
                 updateLogsDisplay()
                 updateStatsDisplay()
+                updateAiStatus()
                 timerHandler.postDelayed(this, 1000)
             } catch (t: Throwable) {
                 saveCrashLog(t)
@@ -319,7 +320,13 @@ class MainActivity : AppCompatActivity() {
 
         if (isActive) {
             binding.tvStatusTitle.text = "Perlindungan Aktif"
-            binding.tvStatusDesc.text = "DNS Anda disaring secara lokal & upstream. Iklan berhasil diblokir."
+            binding.tvStatusDesc.text = if (LocalVpnService.videoGateActive) {
+                "Mode Gerbang Video: di Melolo hanya server video & konten yang dibuka, semua domain lain (iklan) ditutup."
+            } else if (getSharedPreferences("AdBlockPrefs", Context.MODE_PRIVATE).getBoolean("video_gate_mode", true)) {
+                "Melolo tidak ditemukan, Gerbang Video dibatalkan. Memakai mode blokir iklan biasa."
+            } else {
+                "DNS Anda disaring secara lokal & upstream. Iklan berhasil diblokir."
+            }
             binding.tvStatusTitle.setTextColor(ContextCompat.getColor(this, R.color.status_active))
             binding.imgShield.setImageResource(android.R.drawable.ic_lock_idle_lock)
             binding.imgShield.setColorFilter(ContextCompat.getColor(this, R.color.status_active))
@@ -508,6 +515,8 @@ class MainActivity : AppCompatActivity() {
         val hasKey = !prefs.getString("gemini_api_key", "").isNullOrBlank()
         val cloudCount = AiVerdictStore.size()
         val mode = when {
+            LocalVpnService.isRunning && LocalVpnService.videoGateActive -> "🎬 Gerbang Video aktif · hanya video & konten Melolo yang dibuka"
+            prefs.getBoolean("video_gate_mode", true) && !LocalVpnService.isRunning -> "🎬 Gerbang Video siap (aktif saat VPN dinyalakan)"
             !DnsPacketParser.aiAutoEnabled -> "AI Otomatis MATI (hanya daftar bawaan)"
             DnsPacketParser.aggressiveMode -> "AI Lokal aktif · Mode Agresif"
             else -> "AI Lokal aktif · Mode Seimbang"
@@ -521,6 +530,19 @@ class MainActivity : AppCompatActivity() {
         AiVerdictStore.load(this)
         DnsPacketParser.aiAutoEnabled = prefs.getBoolean("ai_auto_enabled", true)
         DnsPacketParser.aggressiveMode = prefs.getBoolean("aggressive_mode", false)
+
+        binding.swVideoGate.isChecked = prefs.getBoolean("video_gate_mode", true)
+        binding.swVideoGate.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean("video_gate_mode", checked).apply()
+            Toast.makeText(
+                this,
+                if (checked) "Mode Gerbang Video aktif: hanya domain video & konten Melolo yang dibuka."
+                else "Mode Gerbang Video mati: kembali ke mode blokir iklan biasa.",
+                Toast.LENGTH_LONG
+            ).show()
+            restartVpnIfRunning()
+            updateAiStatus()
+        }
 
         binding.swAiAuto.isChecked = DnsPacketParser.aiAutoEnabled
         binding.swAggressive.isChecked = DnsPacketParser.aggressiveMode
@@ -558,6 +580,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         updateAiStatus()
+    }
+
+    /** Menyalakan ulang VPN agar perubahan cakupan (Gerbang Video) langsung berlaku. */
+    private fun restartVpnIfRunning() {
+        if (!LocalVpnService.isRunning) return
+        startService(Intent(this, LocalVpnService::class.java).apply { action = LocalVpnService.ACTION_STOP })
+        binding.btnToggleVpn.postDelayed({
+            if (!isFinishing && VpnService.prepare(this) == null) {
+                startVpnServiceDirectly()
+            } else {
+                updateUi()
+            }
+        }, 800)
     }
 
     /** Domain dari log yang belum pasti (bukan bagian basis pengetahuan) dikirim ke AI Online. */
@@ -648,10 +683,10 @@ class MainActivity : AppCompatActivity() {
         fun populate() {
             container.removeAllViews()
             val decisions = domains.map { it to DnsPacketParser.decide(it) }
-            val conflicts = decisions.count { (_, d) ->
+            val conflicts = decisions.count { (_, d) -> !d.source.startsWith("Gerbang") && (
                 (d.verdict.action == DomainAiAnalyzer.Action.BLOCK && !d.blocked) ||
                         (d.verdict.action == DomainAiAnalyzer.Action.ALLOW && d.blocked &&
-                                d.verdict.category != DomainAiAnalyzer.Category.UNKNOWN)
+                                d.verdict.category != DomainAiAnalyzer.Category.UNKNOWN))
             }
 
             container.addView(android.widget.TextView(this).apply {
@@ -719,7 +754,11 @@ class MainActivity : AppCompatActivity() {
                 item.addView(android.widget.TextView(this).apply {
                     text = "Fungsi: ${v.purpose}\nEfek jika diblokir: ${v.impact}\n" +
                             "Alasan: ${v.reasons.joinToString("; ")}$cloudText\n" +
-                            "Status sekarang: ${if (decision.blocked) "DIBLOKIR" else "DIIZINKAN"} (${decision.source})"
+                            "Status sekarang: ${if (decision.blocked) "DIBLOKIR" else "DIIZINKAN"} (${decision.source})" +
+                            (if (decision.note.isNotEmpty()) "\n${decision.note}" else "") +
+                            (if (decision.source == DnsPacketParser.SOURCE_GATE_CLOSED &&
+                                v.category == DomainAiAnalyzer.Category.CORE_APP)
+                                "\n⚠️ Kemungkinan server konten — tekan Izinkan jika video/gambar tidak muncul." else "")
                     textSize = 11f
                     setTextColor(android.graphics.Color.parseColor("#A0A0B0"))
                     setPadding(0, dp(2), 0, dp(6))
@@ -753,6 +792,7 @@ class MainActivity : AppCompatActivity() {
         val blacklist = prefs.getStringSet("custom_blacklist", emptySet())?.toMutableSet() ?: mutableSetOf()
         var changed = 0
         for ((domain, d) in decisions) {
+            if (d.source.startsWith("Gerbang")) continue // keputusan Gerbang Video tidak diubah otomatis
             val v = d.verdict
             if (v.action == DomainAiAnalyzer.Action.BLOCK && !d.blocked) {
                 whitelist.remove(domain); blacklist.add(domain); changed++

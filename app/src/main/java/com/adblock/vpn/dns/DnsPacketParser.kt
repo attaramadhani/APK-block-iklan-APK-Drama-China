@@ -3,6 +3,7 @@ package com.adblock.vpn.dns
 import android.util.Log
 import com.adblock.vpn.ai.AiVerdictStore
 import com.adblock.vpn.ai.DomainAiAnalyzer
+import com.adblock.vpn.ai.VideoGate
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
@@ -21,10 +22,21 @@ object DnsPacketParser {
     @Volatile
     var aggressiveMode = false
 
+    /**
+     * Mode Gerbang Video: hanya domain video/konten Melolo yang dibuka, sisanya ditutup.
+     * Hanya aktif jika VPN berhasil dibatasi ke aplikasi Melolo (diatur oleh LocalVpnService).
+     */
+    @Volatile
+    var videoGateMode = false
+
+    const val SOURCE_GATE_CLOSED = "Gerbang Video"
+    const val SOURCE_GATE_OPEN = "Gerbang: dibuka"
+
     data class FilterDecision(
         val blocked: Boolean,
         val verdict: DomainAiAnalyzer.Verdict,
-        val source: String
+        val source: String,
+        val note: String = ""
     )
 
     private val customWhitelist = hashSetOf<String>()
@@ -74,6 +86,16 @@ object DnsPacketParser {
 
         if (matchesAny(clean, customBlacklist)) return FilterDecision(true, verdict, "Blacklist Anda")
         if (matchesAny(clean, customWhitelist)) return FilterDecision(false, verdict, "Whitelist Anda")
+
+        if (videoGateMode) {
+            val gate = VideoGate.evaluate(clean)
+            return FilterDecision(
+                blocked = !gate.allowed,
+                verdict = verdict,
+                source = if (gate.allowed) SOURCE_GATE_OPEN else SOURCE_GATE_CLOSED,
+                note = gate.reason
+            )
+        }
 
         when (verdict.category) {
             DomainAiAnalyzer.Category.CORE_APP,

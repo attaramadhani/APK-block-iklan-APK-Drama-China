@@ -38,6 +38,12 @@ class LocalVpnService : VpnService() {
         @Volatile
         var startTimeMillis = 0L
 
+        /** True jika Mode Gerbang Video benar-benar aktif pada sesi VPN saat ini. */
+        @Volatile
+        var videoGateActive = false
+
+        const val MELOLO_PACKAGE = "com.worldance.drama"
+
         // Upstream DNS Server Config
         const val ADGUARD_PRIMARY = "94.140.14.14"
         const val ADGUARD_SECONDARY = "94.140.15.15"
@@ -142,6 +148,7 @@ class LocalVpnService : VpnService() {
         Log.i(TAG, "Menghentikan Layanan VPN...")
         isRunning = false
         startTimeMillis = 0L
+        videoGateActive = false
 
         vpnJob?.cancel()
         closeResources()
@@ -230,11 +237,28 @@ class LocalVpnService : VpnService() {
 
             .setBlocking(true)
 
+        // MODE GERBANG VIDEO: VPN hanya untuk Melolo, dan hanya domain video/konten yang dibuka.
+        // Jika Melolo tidak terpasang, gerbang dibatalkan agar tidak menutup internet seluruh HP.
+        var gateActive = false
+        if (prefs.getBoolean("video_gate_mode", true)) {
+            try {
+                builder.addAllowedApplication(MELOLO_PACKAGE)
+                gateActive = true
+                Log.i(TAG, "Mode Gerbang Video aktif untuk $MELOLO_PACKAGE")
+            } catch (e: Exception) {
+                Log.w(TAG, "Melolo tidak terpasang, Mode Gerbang Video dibatalkan.")
+            }
+        }
+        DnsPacketParser.videoGateMode = gateActive
+        videoGateActive = gateActive
+
         // Konfigurasi Cakupan Aplikasi (Scope Mode)
-        if (scopeMode == "MELOLO_ONLY") {
+        if (gateActive) {
+            // Cakupan sudah dibatasi ke Melolo oleh Mode Gerbang Video
+        } else if (scopeMode == "MELOLO_ONLY") {
             // Mode Khusus Melolo: Batasi ke Melolo + Layanan Penyedia Iklan (GMS, WebView, Chrome)
             val packages = listOf(
-                "com.worldance.drama",
+                MELOLO_PACKAGE,
                 "com.google.android.gms",
                 "com.google.android.webview",
                 "com.android.chrome"
