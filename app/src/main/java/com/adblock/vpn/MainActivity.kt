@@ -14,7 +14,11 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.adblock.vpn.ai.AiVerdictStore
+import com.adblock.vpn.ai.CloudAiAnalyzer
+import com.adblock.vpn.ai.DomainAiAnalyzer
 import com.adblock.vpn.databinding.ActivityMainBinding
+import com.adblock.vpn.dns.DnsPacketParser
 
 class MainActivity : AppCompatActivity() {
 
@@ -61,6 +65,7 @@ class MainActivity : AppCompatActivity() {
 
             setupListeners()
             setupSettingsUi()
+            setupAiUi()
         } catch (t: Throwable) {
             saveCrashLog(t)
             showErrorUi(t)
@@ -133,10 +138,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnAnalyzeLogs.setOnClickListener {
-            analyzeLogsWithHeuristics()
+            analyzeLogsWithAi()
         }
 
         // --- CUSTOM WHITELIST & BLACKLIST LISTENERS ---
+        val listPrefs = getSharedPreferences("AdBlockPrefs", Context.MODE_PRIVATE)
+        DnsPacketParser.setCustomWhitelist(listPrefs.getStringSet("custom_whitelist", emptySet()) ?: emptySet())
+        DnsPacketParser.setCustomBlacklist(listPrefs.getStringSet("custom_blacklist", emptySet()) ?: emptySet())
         updateCustomWhitelistUi()
         updateCustomBlacklistUi()
 
@@ -159,7 +167,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnCustomWhitelistClear.setOnClickListener {
             val prefs = getSharedPreferences("AdBlockPrefs", Context.MODE_PRIVATE)
             prefs.edit().putStringSet("custom_whitelist", emptySet()).apply()
-            com.adblock.vpn.dns.DnsPacketParser.setCustomWhitelist(emptySet())
+            DnsPacketParser.setCustomWhitelist(emptySet())
 
             updateCustomWhitelistUi()
             Toast.makeText(this, "Semua domain kustom yang diizinkan berhasil dihapus.", Toast.LENGTH_SHORT).show()
@@ -184,7 +192,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnCustomBlacklistClear.setOnClickListener {
             val prefs = getSharedPreferences("AdBlockPrefs", Context.MODE_PRIVATE)
             prefs.edit().putStringSet("custom_blacklist", emptySet()).apply()
-            com.adblock.vpn.dns.DnsPacketParser.setCustomBlacklist(emptySet())
+            DnsPacketParser.setCustomBlacklist(emptySet())
 
             updateCustomBlacklistUi()
             Toast.makeText(this, "Semua domain kustom yang diblokir berhasil dihapus.", Toast.LENGTH_SHORT).show()
@@ -340,9 +348,7 @@ class MainActivity : AppCompatActivity() {
             val minutes = (elapsedMillis / (1000 * 60)) % 60
             val hours = (elapsedMillis / (1000 * 60 * 60))
 
-            val timeString = String.format("%02d:%02d:%02d", hours, seconds / 60, seconds % 60).let {
-                String.format("%02d:%02d:%02d", hours, minutes, seconds)
-            }
+            val timeString = String.format(java.util.Locale.US, "%02d:%02d:%02d", hours, minutes, seconds)
             binding.tvTimer.text = timeString
             binding.tvTimer.visibility = View.VISIBLE
         } else {
@@ -445,13 +451,13 @@ class MainActivity : AppCompatActivity() {
         if (customBlacklists.contains(domain)) {
             customBlacklists.remove(domain)
             prefs.edit().putStringSet("custom_blacklist", customBlacklists).apply()
-            com.adblock.vpn.dns.DnsPacketParser.setCustomBlacklist(customBlacklists)
+            DnsPacketParser.setCustomBlacklist(customBlacklists)
             updateCustomBlacklistUi()
         }
 
         customWhitelists.add(domain)
         prefs.edit().putStringSet("custom_whitelist", customWhitelists).apply()
-        com.adblock.vpn.dns.DnsPacketParser.setCustomWhitelist(customWhitelists)
+        DnsPacketParser.setCustomWhitelist(customWhitelists)
 
         updateCustomWhitelistUi()
         Toast.makeText(this, "$domain berhasil diizinkan!", Toast.LENGTH_SHORT).show()
@@ -470,13 +476,13 @@ class MainActivity : AppCompatActivity() {
         if (customWhitelists.contains(domain)) {
             customWhitelists.remove(domain)
             prefs.edit().putStringSet("custom_whitelist", customWhitelists).apply()
-            com.adblock.vpn.dns.DnsPacketParser.setCustomWhitelist(customWhitelists)
+            DnsPacketParser.setCustomWhitelist(customWhitelists)
             updateCustomWhitelistUi()
         }
 
         customBlacklists.add(domain)
         prefs.edit().putStringSet("custom_blacklist", customBlacklists).apply()
-        com.adblock.vpn.dns.DnsPacketParser.setCustomBlacklist(customBlacklists)
+        DnsPacketParser.setCustomBlacklist(customBlacklists)
 
         updateCustomBlacklistUi()
         Toast.makeText(this, "$domain berhasil diblokir!", Toast.LENGTH_SHORT).show()
@@ -492,352 +498,278 @@ class MainActivity : AppCompatActivity() {
         updateLogsDisplay()
     }
 
-    private fun getDomainDetailedExplanation(domain: String): Triple<String, String, String> {
-        val d = domain.lowercase().trim()
-        return when {
-            // Core Melolo / Fizzo Services
-            d.contains("melolo.org") || d.contains("melolostatic.com") -> Triple(
-                "Server Utama & Database API Melolo",
-                "Aplikasi tidak bisa dibuka, terjadi kesalahan koneksi server, login gagal, dan novel tidak bisa dimuat.",
-                "🔴 JANGAN DIBLOKIR (Koneksi Inti)"
-            )
-            d.contains("fizzo.org") || d.contains("fizzopic.org") -> Triple(
-                "Server Gambar & Cover Buku Fizzo",
-                "Cover buku novel, gambar profil, dan ilustrasi visual di dalam novel tidak akan muncul.",
-                "🔴 JANGAN DIBLOKIR (Konten Novel)"
-            )
-            d.contains("tmtreader.com") -> Triple(
-                "Mesin Pembaca & Pustaka Teks Novel",
-                "Halaman membaca novel akan kosong (blank putih), teks isi bab novel tidak bisa muncul.",
-                "🔴 JANGAN DIBLOKIR (Mesin Novel)"
-            )
-            d.contains("ibyteimg.com") -> Triple(
-                "CDN Server Gambar & Aset Media",
-                "Gambar novel, ilustrasi bab, dan aset grafis antarmuka tidak akan bisa ditampilkan.",
-                "🔴 JANGAN DIBLOKIR (Aset Media)"
-            )
-            d.contains("pipopay.com") -> Triple(
-                "Gerbang Transaksi Pembayaran Resmi",
-                "Proses top-up koin dan transaksi VIP di aplikasi akan gagal.",
-                "🟡 PILIHAN ANDA (Abaikan jika tidak belanja)"
-            )
+    // =====================================================================
+    //  FITUR AI: ANALISIS DOMAIN MANA YANG BOLEH DIBLOKIR & TIDAK
+    // =====================================================================
 
-            // Known Ad Networks (High Priority Block)
-            d.contains("pangle") || d.contains("pangolin") -> Triple(
-                "Jaringan Iklan Pangle SDK (ByteDance / Melolo)",
-                "Iklan banner pop-up dan video reward saat membaca novel akan hilang sepenuhnya.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("toblog") || d.contains("rtlog") || d.contains("applog") || d.contains("mon.byte") -> Triple(
-                "Server Pelacak & Telemetri Iklan ByteDance",
-                "Menghentikan pengiriman data telemetri baca untuk target iklan di aplikasi Melolo.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("api-ad") || d.contains("ads-api") || d.contains("ad-sg") -> Triple(
-                "Server Distribusi Kampanye Iklan ByteDance",
-                "Mencegah pengambilan materi iklan video dan banner dari server iklan ByteDance.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("pagead") || d.contains("doubleclick") || d.contains("adservice") || d.contains("googleads") -> Triple(
-                "Jaringan Iklan Google Ads / AdMob / DoubleClick",
-                "Iklan banner dan selipan dari jaringan iklan Google akan terblokir tuntas.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("applovin") || d.contains("applvn") -> Triple(
-                "Jaringan Server Iklan AppLovin SDK",
-                "Iklan video layar penuh yang muncul berkala saat mengganti halaman bab akan hilang.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("unityads") || d.contains("unity3d") -> Triple(
-                "Jaringan Iklan Game Unity Ads SDK",
-                "Iklan video interaktif berdurasi 30 detik yang memotong aktivitas membaca akan hilang.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("mintegral") || d.contains("rayjump") || d.contains("mtgglobals") -> Triple(
-                "Jaringan Server Iklan Mintegral SDK",
-                "Iklan interstisial (selipan) di sela-sela bab novel akan terblokir sempurna.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("vungle") || d.contains("liftoff") -> Triple(
-                "Jaringan Server Iklan Video Vungle / Liftoff",
-                "Iklan promosi video game yang memotong bab membaca tidak akan muncul.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("moloco") || d.contains("adsmoloco") -> Triple(
-                "Jaringan Server Iklan Moloco SDK",
-                "Iklan banner penawaran produk komersial di pojok bawah layar tidak akan tampil.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("inmobi") || d.contains("inmobicdn") -> Triple(
-                "Jaringan Server Iklan Seluler InMobi",
-                "Iklan splash pembuka aplikasi akan dihilangkan.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("ironsrc") || d.contains("supersonicads") -> Triple(
-                "Jaringan Iklan IronSource / Supersonic",
-                "Iklan penawaran reward koin dari jaringan pihak ketiga akan diblokir.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("adcolony") -> Triple(
-                "Jaringan Server Iklan Video AdColony",
-                "Iklan video promosi yang memboroskan kuota internet akan diblokir.",
-                "🟢 AMAN DIBLOKIR (Sangat Direkomendasikan)"
-            )
-            d.contains("adjust") || d.contains("appsflyer") || d.contains("branch.io") || d.contains("kochava") -> Triple(
-                "Layanan Atribusi & Pelacakan Pengguna",
-                "Aman diblokir. Mencegah jaringan iklan mencatat riwayat instalasi dan tautan Anda.",
-                "🟢 AMAN DIBLOKIR (Rekomendasi Privasi)"
-            )
-            d.contains("crashlytics") || d.contains("bugsnag") -> Triple(
-                "Sistem Pelacak Eror & Log Kerusakan",
-                "Aman diblokir. Developer tidak menerima laporan crash otomatis.",
-                "🟢 AMAN DIBLOKIR (Rekomendasi Sistem)"
-            )
-
-            // Google Core Services
-            d.contains("googleapis.com") || d.contains("gstatic.com") -> Triple(
-                "Server CDN Font & Library Google",
-                "Tampilan jenis tulisan (font), ikon antarmuka, dan library bawaan sistem.",
-                "🔴 JANGAN DIBLOKIR (Sistem Font & UI)"
-            )
-            d.contains("google.com") -> Triple(
-                "Layanan Mesin Pencari & Core Google",
-                "Integrasi fitur Google Play Service dan Login akun Google.",
-                "🟡 PILIHAN ANDA (Aman diizinkan)"
-            )
-
-            // Video Streaming
-            d.contains("video") || d.contains("stream") || d.contains("media") || d.contains("hls") || d.contains("m3u8") || d.contains("mp4") -> Triple(
-                "Server Putar Video & Streaming Media",
-                "Video drama pendek atau audio di dalam aplikasi tidak akan bisa diputar jika diblokir.",
-                "🔴 JANGAN DIBLOKIR (Pemutar Media)"
-            )
-
-            // CDN Data
-            d.contains("cdn") || d.contains("storage") || d.contains("cloud") || d.contains("byteoversea") -> Triple(
-                "Server Distribusi File & Konten (CDN)",
-                "Pemuatan bab novel baru atau pengunduhan sampul akan lambat jika diblokir.",
-                "🔴 JANGAN DIBLOKIR (CDN Data)"
-            )
-
-            // Auth
-            d.contains("auth") || d.contains("login") || d.contains("byteintl") -> Triple(
-                "Sistem Autentikasi Akun & API Server",
-                "Anda tidak bisa masuk (login) atau sinkronisasi rak buku novel jika diblokir.",
-                "🔴 JANGAN DIBLOKIR (Autentikasi)"
-            )
-
-            else -> Triple(
-                "Server Umum / Koneksi Tidak Dikenal",
-                "Layanan lalu lintas data umum dari library pihak ketiga atau server CDN yang belum dikategorikan.",
-                "🟡 PILIHAN ANDA (Blokir jika curiga, izinkan jika ada fitur app terganggu)"
-            )
+    private fun updateAiStatus() {
+        if (!::binding.isInitialized) return
+        val prefs = getSharedPreferences("AdBlockPrefs", Context.MODE_PRIVATE)
+        val hasKey = !prefs.getString("gemini_api_key", "").isNullOrBlank()
+        val cloudCount = AiVerdictStore.size()
+        val mode = when {
+            !DnsPacketParser.aiAutoEnabled -> "AI Otomatis MATI (hanya daftar bawaan)"
+            DnsPacketParser.aggressiveMode -> "AI Lokal aktif · Mode Agresif"
+            else -> "AI Lokal aktif · Mode Seimbang"
         }
+        val online = if (hasKey) "AI Online siap · $cloudCount keputusan tersimpan" else "AI Online belum diatur"
+        binding.tvAiStatus.text = "$mode\n$online"
     }
 
-    private fun analyzeLogsWithHeuristics() {
-        val logs = DnsLogManager.getLogs()
-        if (logs.isEmpty()) {
-            Toast.makeText(this, "Log aktivitas DNS masih kosong.", Toast.LENGTH_SHORT).show()
+    private fun setupAiUi() {
+        val prefs = getSharedPreferences("AdBlockPrefs", Context.MODE_PRIVATE)
+        AiVerdictStore.load(this)
+        DnsPacketParser.aiAutoEnabled = prefs.getBoolean("ai_auto_enabled", true)
+        DnsPacketParser.aggressiveMode = prefs.getBoolean("aggressive_mode", false)
+
+        binding.swAiAuto.isChecked = DnsPacketParser.aiAutoEnabled
+        binding.swAggressive.isChecked = DnsPacketParser.aggressiveMode
+
+        binding.swAiAuto.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean("ai_auto_enabled", checked).apply()
+            DnsPacketParser.aiAutoEnabled = checked
+            updateAiStatus()
+        }
+        binding.swAggressive.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean("aggressive_mode", checked).apply()
+            DnsPacketParser.aggressiveMode = checked
+            if (checked) {
+                Toast.makeText(this, "Mode Agresif aktif. Jika video Melolo gagal diputar, matikan mode ini.", Toast.LENGTH_LONG).show()
+            }
+            updateAiStatus()
+        }
+
+        val savedKey = prefs.getString("gemini_api_key", "") ?: ""
+        if (savedKey.isNotEmpty()) binding.etGeminiKey.setText(savedKey)
+
+        binding.btnSaveGeminiKey.setOnClickListener {
+            val key = binding.etGeminiKey.text.toString().trim()
+            prefs.edit().putString("gemini_api_key", key).apply()
+            Toast.makeText(this, if (key.isEmpty()) "API key dihapus." else "API key Gemini tersimpan.", Toast.LENGTH_SHORT).show()
+            updateAiStatus()
+        }
+
+        binding.btnCloudAnalyze.setOnClickListener { runCloudAnalysis() }
+
+        binding.btnClearCloudAi.setOnClickListener {
+            AiVerdictStore.clear(this)
+            updateAiStatus()
+            Toast.makeText(this, "Semua keputusan AI Online dihapus.", Toast.LENGTH_SHORT).show()
+        }
+
+        updateAiStatus()
+    }
+
+    /** Domain dari log yang belum pasti (bukan bagian basis pengetahuan) dikirim ke AI Online. */
+    private fun runCloudAnalysis() {
+        val prefs = getSharedPreferences("AdBlockPrefs", Context.MODE_PRIVATE)
+        val apiKey = prefs.getString("gemini_api_key", "") ?: ""
+        if (apiKey.isBlank()) {
+            Toast.makeText(this, "Isi dan simpan API key Gemini terlebih dahulu.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val candidates = DnsLogManager.getLogs()
+            .map { it.domain.lowercase().trim() }
+            .filter { it.contains('.') }
+            .distinct()
+            .filter {
+                val c = DomainAiAnalyzer.analyze(it).category
+                c == DomainAiAnalyzer.Category.UNKNOWN || c == DomainAiAnalyzer.Category.TELEMETRY
+            }
+            .filter { AiVerdictStore.get(it) == null }
+            .take(120)
+
+        if (candidates.isEmpty()) {
+            Toast.makeText(this, "Tidak ada domain baru yang perlu dianalisis online. Buka Melolo dulu agar log terisi.", Toast.LENGTH_LONG).show()
             return
         }
 
-        val uniqueDomains = logs.map { it.domain.lowercase().trim() }.distinct()
-
-        val currentlyBlocked = mutableListOf<String>()
-        val currentlyAllowed = mutableListOf<String>()
-
-        for (domain in uniqueDomains) {
-            if (com.adblock.vpn.dns.DnsPacketParser.isAdDomain(domain)) {
-                currentlyBlocked.add(domain)
-            } else {
-                currentlyAllowed.add(domain)
+        binding.btnCloudAnalyze.isEnabled = false
+        binding.btnCloudAnalyze.text = "Menganalisis..."
+        Thread {
+            val result = try {
+                Result.success(CloudAiAnalyzer.analyze(apiKey, candidates))
+            } catch (e: Exception) {
+                Result.failure(e)
             }
-        }
-
-        showAiRecommendationsDialog(currentlyBlocked, currentlyAllowed)
+            runOnUiThread {
+                if (!::binding.isInitialized || isFinishing) return@runOnUiThread
+                binding.btnCloudAnalyze.isEnabled = true
+                binding.btnCloudAnalyze.text = "Analisis Online"
+                result.onSuccess { verdicts ->
+                    AiVerdictStore.putAll(this, verdicts)
+                    updateAiStatus()
+                    val blocked = verdicts.count { it.value.block }
+                    Toast.makeText(
+                        this,
+                        "AI Online menganalisis ${verdicts.size} domain: $blocked disarankan diblokir.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    analyzeLogsWithAi()
+                }.onFailure { e ->
+                    androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("AI Online gagal")
+                        .setMessage(e.message ?: "Terjadi kesalahan.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }.start()
     }
 
-    private fun showAiRecommendationsDialog(blockedList: List<String>, allowedList: List<String>) {
-        val mutableBlocked = blockedList.toMutableList()
-        val mutableAllowed = allowedList.toMutableList()
-        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
-        builder.setTitle("Analisis AI & Info Domain")
+    private fun analyzeLogsWithAi() {
+        val logs = DnsLogManager.getLogs()
+        if (logs.isEmpty()) {
+            Toast.makeText(this, "Log aktivitas DNS masih kosong. Aktifkan VPN lalu buka Melolo.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val domains = logs.map { it.domain.lowercase().trim() }.filter { it.isNotEmpty() }.distinct()
+        showAiRecommendationsDialog(domains)
+    }
+
+    private fun showAiRecommendationsDialog(domains: List<String>) {
+        val density = resources.displayMetrics.density
+        fun dp(v: Int) = (v * density).toInt()
 
         val container = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
-            val padding = (16 * resources.displayMetrics.density).toInt()
-            setPadding(padding, padding, padding, padding)
+            setPadding(dp(16), dp(8), dp(16), dp(16))
         }
+        val scrollView = android.widget.ScrollView(this).apply { addView(container) }
 
-        val scrollView = android.widget.ScrollView(this).apply {
-            addView(container)
-        }
+        fun colorFor(action: DomainAiAnalyzer.Action) = android.graphics.Color.parseColor(
+            when (action) {
+                DomainAiAnalyzer.Action.BLOCK -> "#4CAF50"
+                DomainAiAnalyzer.Action.REVIEW -> "#FFC107"
+                DomainAiAnalyzer.Action.ALLOW -> "#FF6B6B"
+            }
+        )
 
-        fun populateDialogViews() {
+        fun populate() {
             container.removeAllViews()
-
-            if (mutableAllowed.isNotEmpty()) {
-                val tvHeaderAllowed = android.widget.TextView(this).apply {
-                    text = "🟢 LALU LINTAS DIIZINKAN (Ketuk untuk Blokir)"
-                    setTextColor(android.graphics.Color.parseColor("#4CAF50"))
-                    textSize = 12f
-                    setTypeface(null, android.graphics.Typeface.BOLD)
-                    setPadding(0, 16, 0, 8)
-                }
-                container.addView(tvHeaderAllowed)
-
-                for (domain in mutableAllowed) {
-                    val itemLayout = android.widget.LinearLayout(this).apply {
-                        orientation = android.widget.LinearLayout.VERTICAL
-                        setPadding(12, 12, 12, 12)
-                        setBackgroundColor(android.graphics.Color.parseColor("#2E2E3E"))
-                        val params = android.widget.LinearLayout.LayoutParams(
-                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                        ).apply {
-                            setMargins(0, 6, 0, 6)
-                        }
-                        layoutParams = params
-                    }
-
-                    val tvDomain = android.widget.TextView(this).apply {
-                        text = domain
-                        textSize = 13f
-                        setTextColor(android.graphics.Color.WHITE)
-                        setTypeface(null, android.graphics.Typeface.BOLD)
-                    }
-
-                    val (purpose, impact, rating) = getDomainDetailedExplanation(domain)
-
-                    val tvRating = android.widget.TextView(this).apply {
-                        text = "Rekomendasi AI: $rating"
-                        textSize = 11f
-                        setTypeface(null, android.graphics.Typeface.BOLD)
-                        setTextColor(when {
-                            rating.contains("🔴") -> android.graphics.Color.parseColor("#FF6B6B")
-                            rating.contains("🟢") -> android.graphics.Color.parseColor("#4CAF50")
-                            else -> android.graphics.Color.parseColor("#FFC107")
-                        })
-                        setPadding(0, 4, 0, 2)
-                    }
-
-                    val tvExplanation = android.widget.TextView(this).apply {
-                        text = "Fungsi: $purpose\nEfek jika diblokir: $impact"
-                        textSize = 11f
-                        setTextColor(android.graphics.Color.parseColor("#A0A0B0"))
-                        setPadding(0, 2, 0, 8)
-                    }
-
-                    val btnBlock = com.google.android.material.button.MaterialButton(this).apply {
-                        text = "Blokir"
-                        textSize = 10f
-                        setTextColor(android.graphics.Color.WHITE)
-                        setBackgroundColor(android.graphics.Color.parseColor("#FF6B6B"))
-                        setOnClickListener {
-                            addToBlacklist(domain)
-                            mutableAllowed.remove(domain)
-                            mutableBlocked.add(domain)
-                            populateDialogViews()
-                        }
-                    }
-
-                    itemLayout.addView(tvDomain)
-                    itemLayout.addView(tvRating)
-                    itemLayout.addView(tvExplanation)
-                    itemLayout.addView(btnBlock)
-                    container.addView(itemLayout)
-                }
+            val decisions = domains.map { it to DnsPacketParser.decide(it) }
+            val conflicts = decisions.count { (_, d) ->
+                (d.verdict.action == DomainAiAnalyzer.Action.BLOCK && !d.blocked) ||
+                        (d.verdict.action == DomainAiAnalyzer.Action.ALLOW && d.blocked &&
+                                d.verdict.category != DomainAiAnalyzer.Category.UNKNOWN)
             }
 
-            if (mutableBlocked.isNotEmpty()) {
-                val tvHeaderBlocked = android.widget.TextView(this).apply {
-                    text = "🔴 LALU LINTAS DIBLOKIR (Ketuk untuk Izinkan)"
-                    setTextColor(android.graphics.Color.parseColor("#FF6B6B"))
-                    textSize = 12f
-                    setTypeface(null, android.graphics.Typeface.BOLD)
-                    setPadding(0, 24, 0, 8)
-                }
-                container.addView(tvHeaderBlocked)
+            container.addView(android.widget.TextView(this).apply {
+                val adCount = decisions.count { it.second.verdict.action == DomainAiAnalyzer.Action.BLOCK }
+                val coreCount = decisions.count { it.second.verdict.action == DomainAiAnalyzer.Action.ALLOW }
+                val reviewCount = decisions.size - adCount - coreCount
+                text = "AI menganalisis ${decisions.size} domain:\n" +
+                        "🟢 $adCount aman diblokir · 🟡 $reviewCount perlu ditinjau · 🔴 $coreCount jangan diblokir\n" +
+                        if (conflicts > 0) "⚠️ $conflicts domain belum sesuai rekomendasi AI." else "✅ Semua pengaturan sudah sesuai rekomendasi AI."
+                setTextColor(android.graphics.Color.WHITE)
+                textSize = 12f
+                setPadding(0, dp(4), 0, dp(8))
+            })
 
-                for (domain in mutableBlocked) {
-                    val itemLayout = android.widget.LinearLayout(this).apply {
-                        orientation = android.widget.LinearLayout.VERTICAL
-                        setPadding(12, 12, 12, 12)
-                        setBackgroundColor(android.graphics.Color.parseColor("#2E2E3E"))
-                        val params = android.widget.LinearLayout.LayoutParams(
-                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
-                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
-                        ).apply {
-                            setMargins(0, 6, 0, 6)
-                        }
-                        layoutParams = params
+            if (conflicts > 0) {
+                container.addView(com.google.android.material.button.MaterialButton(this).apply {
+                    text = "Terapkan Semua Rekomendasi AI"
+                    textSize = 11f
+                    setBackgroundColor(android.graphics.Color.parseColor("#6200EE"))
+                    setOnClickListener {
+                        applyAiRecommendations(decisions)
+                        populate()
                     }
-
-                    val tvDomain = android.widget.TextView(this).apply {
-                        text = domain
-                        textSize = 13f
-                        setTextColor(android.graphics.Color.WHITE)
-                        setTypeface(null, android.graphics.Typeface.BOLD)
-                    }
-
-                    val (purpose, impact, rating) = getDomainDetailedExplanation(domain)
-
-                    val tvRating = android.widget.TextView(this).apply {
-                        text = "Rekomendasi AI: $rating"
-                        textSize = 11f
-                        setTypeface(null, android.graphics.Typeface.BOLD)
-                        setTextColor(when {
-                            rating.contains("🔴") -> android.graphics.Color.parseColor("#FF6B6B")
-                            rating.contains("🟢") -> android.graphics.Color.parseColor("#4CAF50")
-                            else -> android.graphics.Color.parseColor("#FFC107")
-                        })
-                        setPadding(0, 4, 0, 2)
-                    }
-
-                    val tvExplanation = android.widget.TextView(this).apply {
-                        text = "Fungsi: $purpose\nEfek jika diblokir: $impact"
-                        textSize = 11f
-                        setTextColor(android.graphics.Color.parseColor("#A0A0B0"))
-                        setPadding(0, 2, 0, 8)
-                    }
-
-                    val btnAllow = com.google.android.material.button.MaterialButton(this).apply {
-                        text = "Izinkan"
-                        textSize = 10f
-                        setTextColor(android.graphics.Color.WHITE)
-                        setBackgroundColor(android.graphics.Color.parseColor("#03DAC6"))
-                        setOnClickListener {
-                            addToWhitelist(domain)
-                            mutableBlocked.remove(domain)
-                            mutableAllowed.add(domain)
-                            populateDialogViews()
-                        }
-                    }
-
-                    itemLayout.addView(tvDomain)
-                    itemLayout.addView(tvRating)
-                    itemLayout.addView(tvExplanation)
-                    itemLayout.addView(btnAllow)
-                    container.addView(itemLayout)
-                }
+                })
             }
 
-            if (mutableBlocked.isEmpty() && mutableAllowed.isEmpty()) {
-                val tvEmpty = android.widget.TextView(this).apply {
-                    text = "Tidak ada aktivitas koneksi terdeteksi."
-                    setTextColor(android.graphics.Color.GRAY)
-                    textSize = 14f
-                    gravity = android.view.Gravity.CENTER
-                    setPadding(0, 32, 0, 32)
+            // Urutkan: perlu tindakan dulu, lalu iklan, ditinjau, inti
+            val sorted = decisions.sortedWith(compareBy<Pair<String, DnsPacketParser.FilterDecision>> {
+                when (it.second.verdict.action) {
+                    DomainAiAnalyzer.Action.BLOCK -> if (!it.second.blocked) 0 else 2
+                    DomainAiAnalyzer.Action.REVIEW -> 3
+                    DomainAiAnalyzer.Action.ALLOW -> if (it.second.blocked) 1 else 4
                 }
-                container.addView(tvEmpty)
+            }.thenByDescending { it.second.verdict.adScore })
+
+            for ((domain, decision) in sorted.take(200)) {
+                val v = decision.verdict
+                val item = android.widget.LinearLayout(this).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    setPadding(dp(12), dp(10), dp(12), dp(10))
+                    setBackgroundColor(android.graphics.Color.parseColor("#2E2E3E"))
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { setMargins(0, dp(4), 0, dp(4)) }
+                }
+                item.addView(android.widget.TextView(this).apply {
+                    text = domain
+                    textSize = 13f
+                    setTextColor(android.graphics.Color.WHITE)
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                })
+                item.addView(android.widget.TextView(this).apply {
+                    text = "Rekomendasi AI: ${v.action.label}\n" +
+                            "Kategori: ${v.category.label} · Skor iklan ${v.adScore}% · Keyakinan ${v.confidence}%"
+                    textSize = 11f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    setTextColor(colorFor(v.action))
+                    setPadding(0, dp(2), 0, dp(2))
+                })
+                val cloud = AiVerdictStore.get(domain)
+                val cloudText = if (cloud != null) {
+                    "\nAI Online: ${if (cloud.block) "blokir" else "izinkan"} (${cloud.category}) — ${cloud.reason}"
+                } else ""
+                item.addView(android.widget.TextView(this).apply {
+                    text = "Fungsi: ${v.purpose}\nEfek jika diblokir: ${v.impact}\n" +
+                            "Alasan: ${v.reasons.joinToString("; ")}$cloudText\n" +
+                            "Status sekarang: ${if (decision.blocked) "DIBLOKIR" else "DIIZINKAN"} (${decision.source})"
+                    textSize = 11f
+                    setTextColor(android.graphics.Color.parseColor("#A0A0B0"))
+                    setPadding(0, dp(2), 0, dp(6))
+                })
+                item.addView(com.google.android.material.button.MaterialButton(this).apply {
+                    text = if (decision.blocked) "Izinkan" else "Blokir"
+                    textSize = 10f
+                    setTextColor(android.graphics.Color.WHITE)
+                    setBackgroundColor(android.graphics.Color.parseColor(if (decision.blocked) "#03DAC6" else "#FF6B6B"))
+                    setOnClickListener {
+                        if (decision.blocked) addToWhitelist(domain) else addToBlacklist(domain)
+                        populate()
+                    }
+                })
+                container.addView(item)
             }
         }
 
-        populateDialogViews()
-        builder.setView(scrollView)
-        builder.setPositiveButton("Selesai", null)
-        builder.show()
+        populate()
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("🤖 Analisis AI: Boleh Diblokir atau Tidak?")
+            .setView(scrollView)
+            .setPositiveButton("Selesai") { _, _ -> updateLogsDisplay() }
+            .show()
+    }
+
+    /** Menyelaraskan daftar kustom dengan rekomendasi AI. */
+    private fun applyAiRecommendations(decisions: List<Pair<String, DnsPacketParser.FilterDecision>>) {
+        val prefs = getSharedPreferences("AdBlockPrefs", Context.MODE_PRIVATE)
+        val whitelist = prefs.getStringSet("custom_whitelist", emptySet())?.toMutableSet() ?: mutableSetOf()
+        val blacklist = prefs.getStringSet("custom_blacklist", emptySet())?.toMutableSet() ?: mutableSetOf()
+        var changed = 0
+        for ((domain, d) in decisions) {
+            val v = d.verdict
+            if (v.action == DomainAiAnalyzer.Action.BLOCK && !d.blocked) {
+                whitelist.remove(domain); blacklist.add(domain); changed++
+            } else if (v.action == DomainAiAnalyzer.Action.ALLOW && d.blocked &&
+                v.category != DomainAiAnalyzer.Category.UNKNOWN
+            ) {
+                blacklist.remove(domain); whitelist.add(domain); changed++
+            }
+        }
+        prefs.edit()
+            .putStringSet("custom_whitelist", whitelist)
+            .putStringSet("custom_blacklist", blacklist)
+            .apply()
+        DnsPacketParser.setCustomWhitelist(whitelist)
+        DnsPacketParser.setCustomBlacklist(blacklist)
+        updateCustomWhitelistUi()
+        updateCustomBlacklistUi()
+        Toast.makeText(this, "$changed domain disesuaikan dengan rekomendasi AI.", Toast.LENGTH_SHORT).show()
     }
 }

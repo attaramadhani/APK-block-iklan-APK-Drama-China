@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.adblock.vpn.ai.AiVerdictStore
 import com.adblock.vpn.dns.DnsPacketParser
 import com.adblock.vpn.dns.IpUdpPacketBuilder
 import kotlinx.coroutines.*
@@ -65,7 +66,9 @@ class LocalVpnService : VpnService() {
             return START_NOT_STICKY
         }
 
-        if (action == ACTION_START && !isRunning) {
+        // ACTION_START, restart otomatis (intent null) dan Always-on VPN
+        // (action "android.net.VpnService") semuanya memulai VPN.
+        if (!isRunning) {
             startVpn()
         }
 
@@ -94,6 +97,12 @@ class LocalVpnService : VpnService() {
 
         val customBlockedDomains = prefs.getStringSet("custom_blacklist", emptySet()) ?: emptySet()
         DnsPacketParser.setCustomBlacklist(customBlockedDomains)
+
+        // Pengaturan AI
+        DnsPacketParser.aiAutoEnabled = prefs.getBoolean("ai_auto_enabled", true)
+        DnsPacketParser.aggressiveMode = prefs.getBoolean("aggressive_mode", false)
+        AiVerdictStore.load(this)
+        dnsCache.clear()
 
         // Upstream DNS Mode
         val upstreamDnsType = prefs.getString("upstream_dns", "ADGUARD") ?: "ADGUARD"
@@ -240,6 +249,12 @@ class LocalVpnService : VpnService() {
             }
         } else {
             // Mode GLOBAL (Default & Direkomendasikan): Lindungi seluruh sistem perangkat
+            // Aplikasi ini sendiri dikecualikan agar permintaan AI Online tidak berputar di dalam VPN.
+            try {
+                builder.addDisallowedApplication(packageName)
+            } catch (e: Exception) {
+                Log.d(TAG, "Gagal mengecualikan aplikasi sendiri: ${e.message}")
+            }
             Log.i(TAG, "VPN berjalan dalam Mode GLOBAL (Semua Aplikasi)")
         }
 
@@ -298,77 +313,108 @@ class LocalVpnService : VpnService() {
     }
 
     private suspend fun handlePacket(packet: ByteArray) {
+        if (packet.isEmpty()) return
+        when ((packet[0].toInt() and 0xF0) shr 4) {
+            4 -> handleIpv4Packet(packet)
+            6 -> handleIpv6Packet(packet)
+        }
+    }
+
+    private suspend fun handleIpv4Packet(packet: ByteArray) {
         if (packet.size < 20) return
-
-        // Parse Header IP (IPv4)
-        val version = (packet[0].toInt() and 0xF0) shr 4
-        if (version != 4) return
-
-        val ihl = packet[0].toInt() and 0x0F
-        val ipHeaderLength = ihl * 4
+        val ipHeaderLength = (packet[0].toInt() and 0x0F) * 4
         if (packet.size < ipHeaderLength + 8) return
+        if ((packet[9].toInt() and 0xFF) != 17) return // hanya UDP
 
-        // Cek Protocol (17 = UDP)
-        val protocol = packet[9].toInt() and 0xFF
-        if (protocol != 17) return
+        val srcIp = packet.copyOfRange(12, 16)
+        val destIp = packet.copyOfRange(16, 20)
+        handleUdp(packet, ipHeaderLength, srcIp, destIp, isIpv6 = false)
+    }
 
-        // Parse Header UDP
-        val udpStart = ipHeaderLength
+    private suspend fun handleIpv6Packet(packet: ByteArray) {
+        if (packet.size < 48) return
+        if ((packet[6].toInt() and 0xFF) != 17) return // hanya UDP tanpa extension header
+        val srcIp = packet.copyOfRange(8, 24)
+        val destIp = packet.copyOfRange(24, 40)
+        handleUdp(packet, 40, srcIp, destIp, isIpv6 = true)
+    }
+
+    private suspend fun handleUdp(
+        packet: ByteArray,
+        udpStart: Int,
+        srcIp: ByteArray,
+        destIp: ByteArray,
+        isIpv6: Boolean
+    ) {
         val srcPort = ((packet[udpStart].toInt() and 0xFF) shl 8) or (packet[udpStart + 1].toInt() and 0xFF)
         val destPort = ((packet[udpStart + 2].toInt() and 0xFF) shl 8) or (packet[udpStart + 3].toInt() and 0xFF)
+        if (destPort != 53) return
 
-        // Cek apakah lalu lintas ditujukan ke port DNS (53)
-        if (destPort == 53) {
-            val dnsPayloadStart = udpStart + 8
-            val dnsPayloadSize = packet.size - dnsPayloadStart
-            if (dnsPayloadSize <= 12) return
+        val dnsPayloadStart = udpStart + 8
+        val dnsPayloadSize = packet.size - dnsPayloadStart
+        if (dnsPayloadSize <= 12) return
+        val dnsPayload = packet.copyOfRange(dnsPayloadStart, packet.size)
 
-            val dnsPayload = ByteArray(dnsPayloadSize)
-            System.arraycopy(packet, dnsPayloadStart, dnsPayload, 0, dnsPayloadSize)
+        // Ekstrak nama domain dan minta keputusan dari mesin filter + AI
+        val (domain, qEnd) = DnsPacketParser.parseDomainName(dnsPayload, 12)
+        val decision = DnsPacketParser.decide(domain)
+        DnsLogManager.addLog(domain, decision.blocked, decision.verdict.shortLabel, decision.source)
+        Log.d(TAG, "DNS Query: $domain (Blocked: ${decision.blocked}, ${decision.source})")
 
-            // Ekstrak nama domain dari DNS Request
-            val (domain, _) = DnsPacketParser.parseDomainName(dnsPayload, 12)
-            val isBlocked = DnsPacketParser.isAdDomain(domain)
-            DnsLogManager.addLog(domain, isBlocked)
-            Log.d(TAG, "DNS Query: $domain (Blocked: $isBlocked)")
-
-            // Ambil detail IP Asal dan Tujuan untuk respon
-            val srcIp = ByteArray(4)
-            val destIp = ByteArray(4)
-            System.arraycopy(packet, 12, srcIp, 0, 4)  // Client IP (Asal)
-            System.arraycopy(packet, 16, destIp, 0, 4) // DNS Server IP (Tujuan)
-
-            if (isBlocked) {
-                // DOMAIN IKLAN: Blokir dan berikan respon 0.0.0.0 / :: sesuai tipe query
-                Log.w(TAG, ">>> MEMBLOKIR IKLAN: $domain")
-                val blockDnsResponse = DnsPacketParser.createBlockResponse(dnsPayload)
-
-                val responsePacket = IpUdpPacketBuilder.buildIpUdpPacket(
-                    sourceIp = destIp,
-                    destIp = srcIp,
-                    sourcePort = 53,
-                    destPort = srcPort,
-                    dnsPayload = blockDnsResponse
-                )
-
-                writePacketToTun(responsePacket)
-            } else {
-                // DOMAIN NORMAL: Teruskan ke Upstream DNS (AdGuard / Cloudflare / Google)
-                forwardDnsRequest(dnsPayload, srcIp, srcPort, destIp)
-            }
+        val responsePayload: ByteArray? = if (decision.blocked) {
+            DnsPacketParser.createBlockResponse(dnsPayload)
+        } else {
+            resolveUpstream(dnsPayload, domain, qEnd)
         }
+        responsePayload ?: return
+
+        val responsePacket = if (isIpv6) {
+            IpUdpPacketBuilder.buildIpv6UdpPacket(destIp, srcIp, 53, srcPort, responsePayload)
+        } else {
+            IpUdpPacketBuilder.buildIpUdpPacket(destIp, srcIp, 53, srcPort, responsePayload)
+        }
+        writePacketToTun(responsePacket)
+    }
+
+    // --- CACHE DNS (mempercepat & mengurangi beban upstream) ---
+
+    private class CachedResponse(val payload: ByteArray, val expiresAt: Long)
+
+    private val dnsCache = java.util.concurrent.ConcurrentHashMap<String, CachedResponse>()
+    private val cacheTtlMillis = 60_000L
+    private val maxCacheEntries = 1000
+
+    private suspend fun resolveUpstream(dnsPayload: ByteArray, domain: String, qEnd: Int): ByteArray? {
+        val qType = if (qEnd + 2 <= dnsPayload.size) {
+            ((dnsPayload[qEnd].toInt() and 0xFF) shl 8) or (dnsPayload[qEnd + 1].toInt() and 0xFF)
+        } else -1
+        val cacheKey = "${domain.lowercase()}|$qType"
+        val now = System.currentTimeMillis()
+
+        dnsCache[cacheKey]?.let { cached ->
+            if (cached.expiresAt > now && cached.payload.size >= 2) {
+                val copy = cached.payload.copyOf()
+                copy[0] = dnsPayload[0] // salin Transaction ID dari query baru
+                copy[1] = dnsPayload[1]
+                return copy
+            }
+            dnsCache.remove(cacheKey)
+        }
+
+        val response = forwardDnsRequest(dnsPayload) ?: return null
+        // Cache hanya respon sukses (RCODE 0) dan tidak terpotong (TC=0)
+        if (response.size > 3 && (response[3].toInt() and 0x0F) == 0 && (response[2].toInt() and 0x02) == 0) {
+            if (dnsCache.size >= maxCacheEntries) dnsCache.clear()
+            dnsCache[cacheKey] = CachedResponse(response.copyOf(), now + cacheTtlMillis)
+        }
+        return response
     }
 
     /**
      * Meneruskan query DNS yang sah ke Upstream Server menggunakan DatagramSocket yang dilindungi.
      * Menggunakan mekanisme fallback jika server primer mengalami timeout.
      */
-    private suspend fun forwardDnsRequest(
-        dnsPayload: ByteArray,
-        clientIp: ByteArray,
-        clientPort: Int,
-        vpnDnsIp: ByteArray
-    ) {
+    private suspend fun forwardDnsRequest(dnsPayload: ByteArray): ByteArray? =
         withContext(Dispatchers.IO) {
             // Coba server primer
             var responsePayload = queryUpstreamDns(dnsPayload, primaryDnsIp)
@@ -378,19 +424,8 @@ class LocalVpnService : VpnService() {
                 Log.w(TAG, "Upstream primer ($primaryDnsIp) gagal, mencoba sekunder ($secondaryDnsIp)...")
                 responsePayload = queryUpstreamDns(dnsPayload, secondaryDnsIp)
             }
-
-            if (responsePayload != null) {
-                val responsePacket = IpUdpPacketBuilder.buildIpUdpPacket(
-                    sourceIp = vpnDnsIp,
-                    destIp = clientIp,
-                    sourcePort = 53,
-                    destPort = clientPort,
-                    dnsPayload = responsePayload
-                )
-                writePacketToTun(responsePacket)
-            }
+            responsePayload
         }
-    }
 
     private fun queryUpstreamDns(dnsPayload: ByteArray, serverIp: String): ByteArray? {
         var socket: DatagramSocket? = null

@@ -71,6 +71,52 @@ object IpUdpPacketBuilder {
     }
 
     /**
+     * Membungkus DNS payload ke dalam paket IPv6 + UDP (RFC 8200 / RFC 768).
+     * Pada IPv6 checksum UDP WAJIB diisi (dihitung dengan pseudo-header).
+     */
+    fun buildIpv6UdpPacket(
+        sourceIp: ByteArray,
+        destIp: ByteArray,
+        sourcePort: Int,
+        destPort: Int,
+        dnsPayload: ByteArray
+    ): ByteArray {
+        val ipHeaderLength = 40
+        val udpLength = 8 + dnsPayload.size
+        val packetBytes = ByteArray(ipHeaderLength + udpLength)
+        val buffer = ByteBuffer.wrap(packetBytes)
+
+        // Version 6, Traffic Class 0, Flow Label 0
+        buffer.putInt(0x60000000)
+        buffer.putShort(udpLength.toShort()) // Payload length
+        buffer.put(17.toByte())              // Next header: UDP
+        buffer.put(64.toByte())              // Hop limit
+        buffer.put(sourceIp, 0, 16)
+        buffer.put(destIp, 0, 16)
+
+        // UDP header
+        buffer.putShort(sourcePort.toShort())
+        buffer.putShort(destPort.toShort())
+        buffer.putShort(udpLength.toShort())
+        buffer.putShort(0.toShort()) // checksum sementara
+        buffer.put(dnsPayload)
+
+        // Pseudo-header: src(16) + dst(16) + udpLength(4) + zero(3) + nextHeader(1)
+        val pseudo = ByteArray(40 + udpLength + (udpLength and 1))
+        System.arraycopy(sourceIp, 0, pseudo, 0, 16)
+        System.arraycopy(destIp, 0, pseudo, 16, 16)
+        ByteBuffer.wrap(pseudo).putInt(32, udpLength)
+        pseudo[39] = 17
+        System.arraycopy(packetBytes, ipHeaderLength, pseudo, 40, udpLength)
+
+        var checksum = calculateChecksum(pseudo, pseudo.size)
+        if (checksum.toInt() == 0) checksum = 0xFFFF.toShort()
+        buffer.putShort(ipHeaderLength + 6, checksum)
+
+        return packetBytes
+    }
+
+    /**
      * Menghitung Checksum Internet (RFC 791) untuk Header IP.
      * Menggunakan penjumlahan komplemen satu dari seluruh word 16-bit di dalam buffer.
      */

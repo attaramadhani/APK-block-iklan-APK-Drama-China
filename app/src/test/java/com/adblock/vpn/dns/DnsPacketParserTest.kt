@@ -26,53 +26,55 @@ class DnsPacketParserTest {
 
     @Test
     fun testIsAdDomain() {
-        // Cek domain iklan/tracker (harus diblokir karena tidak ada di whitelist)
+        DnsPacketParser.aiAutoEnabled = true
+        DnsPacketParser.aggressiveMode = false
+
+        // Jaringan iklan & pelacak yang ditemukan di APK Melolo -> diblokir
         assertTrue(DnsPacketParser.isAdDomain("doubleclick.net"))
-        
-        // Cek subdomain iklan
-        assertTrue(DnsPacketParser.isAdDomain("sub.doubleclick.net"))
-
-        // Cek domain baru (playable ads & trackers)
+        assertTrue(DnsPacketParser.isAdDomain("googleads.g.doubleclick.net"))
+        assertTrue(DnsPacketParser.isAdDomain("mediation-sg.pangle.io"))
+        assertTrue(DnsPacketParser.isAdDomain("api16-access-sg.pangle.io"))
+        assertTrue(DnsPacketParser.isAdDomain("sf16-static.i18n-pglstatp.com"))
         assertTrue(DnsPacketParser.isAdDomain("sg-gcp-ad-track-sdk-asia-southeast1-b.mtgglobals.com"))
-        assertTrue(DnsPacketParser.isAdDomain("mtgglobals.com"))
-        assertTrue(DnsPacketParser.isAdDomain("mobvista.com"))
-        assertTrue(DnsPacketParser.isAdDomain("spadsync.com"))
-        assertTrue(DnsPacketParser.isAdDomain("google-analytics.com"))
-        assertTrue(DnsPacketParser.isAdDomain("gecko-sg.byteoversea.com"))
-        assertTrue(DnsPacketParser.isAdDomain("sf-tk-sg.ibytedtos.com"))
-        assertTrue(DnsPacketParser.isAdDomain("sf16-muse-va.ibytedtos.com"))
-        assertTrue(DnsPacketParser.isAdDomain("mon-va.tiktokv.com"))
-        assertTrue(DnsPacketParser.isAdDomain("d1tru86qrby720.cloudfront.net"))
-        assertTrue(DnsPacketParser.isAdDomain("api16-access-ttp.tiktokpangle-b.us"))
         assertTrue(DnsPacketParser.isAdDomain("sdkapi.dsp-api.moloco.com"))
+        assertTrue(DnsPacketParser.isAdDomain("api16-access-ttp.tiktokpangle-b.us"))
+        assertTrue(DnsPacketParser.isAdDomain("google-analytics.com"))
+        assertTrue(DnsPacketParser.isAdDomain("imasdk.googleapis.com"))
+        assertTrue(DnsPacketParser.isAdDomain("mon-va.tiktokv.com"))
+        assertTrue(DnsPacketParser.isAdDomain("rtlog.sgsnssdk.com"))
+        assertTrue(DnsPacketParser.isAdDomain("ads.tmtreader.com"))
 
-        // Cek domain luar yang bukan bagian dari whitelist Melolo (harus diblokir secara default)
-        assertTrue(DnsPacketParser.isAdDomain("github.com"))
-
-        // Cek domain Melolo/sistem yang ada di whitelist (harus diloloskan / false)
-        assertFalse(DnsPacketParser.isAdDomain("google.com"))
-        assertFalse(DnsPacketParser.isAdDomain("ads.google.com"))
+        // Domain inti Melolo -> TIDAK diblokir
+        assertFalse(DnsPacketParser.isAdDomain("api.tmtreader.com"))
         assertFalse(DnsPacketParser.isAdDomain("melolostatic.com"))
         assertFalse(DnsPacketParser.isAdDomain("v16-ml.melolostatic.com"))
+        assertFalse(DnsPacketParser.isAdDomain("p16-novel-sg.ibyteimg.com"))
+        assertFalse(DnsPacketParser.isAdDomain("vod-urls-mya.byteintlapi.com"))
         assertFalse(DnsPacketParser.isAdDomain("tnc16-alisg.isnssdk.com"))
+        assertFalse(DnsPacketParser.isAdDomain("sf16-passport-sg.ibytedtos.com"))
+        assertFalse(DnsPacketParser.isAdDomain("google.com"))
         assertFalse(DnsPacketParser.isAdDomain(""))
 
-        // Cek custom whitelist (setelah dimasukkan, harus diloloskan / false)
-        DnsPacketParser.setCustomWhitelist(setOf("github.com"))
+        // Domain umum yang tidak dikenal TIDAK lagi diblokir otomatis (perbaikan v2)
         assertFalse(DnsPacketParser.isAdDomain("github.com"))
-        assertFalse(DnsPacketParser.isAdDomain("sub.github.com"))
-        DnsPacketParser.setCustomWhitelist(emptySet())
-        assertTrue(DnsPacketParser.isAdDomain("github.com"))
+        assertFalse(DnsPacketParser.isAdDomain("example-shop.co.id"))
 
-        // Cek custom blacklist (setelah dimasukkan, harus diblokir / true meskipun ada di whitelist)
+        // Telemetri ByteDance hanya diblokir di Mode Agresif
+        assertFalse(DnsPacketParser.isAdDomain("log.tmtreader.com"))
+        DnsPacketParser.aggressiveMode = true
+        assertTrue(DnsPacketParser.isAdDomain("log.tmtreader.com"))
+        DnsPacketParser.aggressiveMode = false
+
+        // Custom blacklist prioritas tertinggi
         DnsPacketParser.setCustomWhitelist(setOf("google.com"))
-        assertFalse(DnsPacketParser.isAdDomain("google.com")) // Diizinkan karena whitelist kustom
-        
         DnsPacketParser.setCustomBlacklist(setOf("google.com"))
-        assertTrue(DnsPacketParser.isAdDomain("google.com")) // Diblokir karena blacklist kustom memiliki prioritas lebih tinggi
-        assertTrue(DnsPacketParser.isAdDomain("sub.google.com")) // Subdomain juga diblokir
-        
+        assertTrue(DnsPacketParser.isAdDomain("google.com"))
+        assertTrue(DnsPacketParser.isAdDomain("sub.google.com"))
         DnsPacketParser.setCustomBlacklist(emptySet())
+
+        // Custom whitelist bisa membuka domain iklan
+        DnsPacketParser.setCustomWhitelist(setOf("pangle.io"))
+        assertFalse(DnsPacketParser.isAdDomain("mediation.pangle.io"))
         DnsPacketParser.setCustomWhitelist(emptySet())
     }
 

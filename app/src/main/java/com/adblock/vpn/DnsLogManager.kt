@@ -18,10 +18,17 @@ object DnsLogManager {
     private val blockedCount = AtomicInteger(0)
     private val allowedCount = AtomicInteger(0)
 
-    class LogEntry(val timestamp: String, val domain: String, val isBlocked: Boolean) {
+    class LogEntry(
+        val timestamp: String,
+        val domain: String,
+        val isBlocked: Boolean,
+        val aiLabel: String = "",
+        val source: String = ""
+    ) {
         override fun toString(): String {
             val status = if (isBlocked) "[BLOCKED]" else "[ALLOWED]"
-            return "$timestamp $status $domain"
+            val extra = if (aiLabel.isNotEmpty()) " ($aiLabel, $source)" else ""
+            return "$timestamp $status $domain$extra"
         }
     }
 
@@ -48,10 +55,10 @@ object DnsLogManager {
         }
     }
 
-    fun addLog(domain: String, isBlocked: Boolean) {
+    fun addLog(domain: String, isBlocked: Boolean, aiLabel: String = "", source: String = "") {
         val sdf = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
         val time = sdf.format(Date())
-        val entry = LogEntry(time, domain, isBlocked)
+        val entry = LogEntry(time, domain, isBlocked, aiLabel, source)
 
         if (isBlocked) {
             blockedCount.incrementAndGet()

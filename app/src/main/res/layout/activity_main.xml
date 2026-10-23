@@ -329,13 +329,161 @@
                         android:buttonTint="#03DAC6" />
                 </RadioGroup>
 
+                <!-- Pengaturan AI -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Kecerdasan Filter:"
+                    android:textColor="#A0A0B0"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="12dp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/swAiAuto"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:checked="true"
+                    android:text="AI Otomatis — blokir domain baru yang dinilai AI sebagai iklan"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    app:thumbTint="#03DAC6" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/swAggressive"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="false"
+                    android:text="Mode Agresif — blokir juga telemetri ByteDance &amp; domain mencurigakan (bisa membuat video gagal diputar)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    app:thumbTint="#FF6B6B" />
+
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="* Perubahan mode atau DNS akan aktif saat VPN dinyalakan ulang."
+                    android:text="* Perubahan mode cakupan atau DNS aktif saat VPN dinyalakan ulang. Pengaturan AI langsung aktif."
                     android:textColor="#808090"
                     android:textSize="11sp"
                     android:layout_marginTop="8dp" />
+
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- Card Asisten AI -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardAi"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            app:cardBackgroundColor="#1E1E2E">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🤖 Asisten AI Pemblokir"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="AI Lokal (offline) menilai setiap domain: iklan, pelacak, atau server inti Melolo yang tidak boleh diblokir. AI Online (Gemini, opsional) memberi analisis kedua untuk domain yang belum dikenal. Hanya nama domain yang dikirim."
+                    android:textColor="#D0D0E0"
+                    android:textSize="12sp"
+                    android:lineSpacingExtra="2dp" />
+
+                <TextView
+                    android:id="@+id/tvAiStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="AI Lokal aktif"
+                    android:textColor="#03DAC6"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <EditText
+                        android:id="@+id/etGeminiKey"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:hint="API key Gemini (opsional)"
+                        android:textColorHint="#606070"
+                        android:textColor="#FFFFFF"
+                        android:textSize="13sp"
+                        android:backgroundTint="#03DAC6"
+                        android:maxLines="1"
+                        android:inputType="textPassword" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSaveGeminiKey"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="Simpan"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        app:backgroundTint="#6200EE"
+                        app:cornerRadius="8dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="Buat API key gratis di aistudio.google.com/apikey"
+                    android:textColor="#808090"
+                    android:textSize="11sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="10dp"
+                    android:weightSum="2">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCloudAnalyze"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:text="Analisis Online"
+                        android:textSize="11sp"
+                        android:textColor="#FFFFFF"
+                        app:backgroundTint="#03DAC6"
+                        app:cornerRadius="8dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnClearCloudAi"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="4dp"
+                        android:text="Reset AI Online"
+                        android:textSize="11sp"
+                        android:textColor="#FFFFFF"
+                        app:backgroundTint="#FF6B6B"
+                        app:cornerRadius="8dp" />
+                </LinearLayout>
 
             </LinearLayout>
         </androidx.cardview.widget.CardView>

@@ -4,38 +4,44 @@ Aplikasi Android berbasis **Local VPN Service** yang berfungsi untuk memblokir i
 
 ---
 
+## 🆕 Yang Baru di Versi 2.0
+
+- **🤖 Asisten AI Pemblokir** — menganalisis setiap domain dan memutuskan mana yang **aman diblokir** dan mana yang **jangan diblokir**:
+  - **AI Lokal (offline, gratis, otomatis):** basis pengetahuan dari hasil bedah APK Melolo (`com.worldance.drama`) + analisis pola subdomain ByteDance (`mon-*`, `rtlog-*`, `log-*`, `tnc-*`) + model skor berbasis token (skor iklan 0–100% dan tingkat keyakinan).
+  - **AI Online (opsional, Gemini):** isi API key gratis dari [aistudio.google.com/apikey](https://aistudio.google.com/apikey), lalu tekan **Analisis Online** untuk menilai domain yang belum dikenal. Hanya nama domain yang dikirim. Domain inti Melolo tidak akan pernah diblokir walaupun AI Online menyarankan.
+  - Dialog **Analisis AI** menampilkan rekomendasi, kategori, skor, alasan, dan efek jika diblokir, plus tombol **Terapkan Semua Rekomendasi AI**.
+- **Perbaikan besar engine filter:** versi lama memblokir *semua* domain yang tidak ada di whitelist sehingga video Melolo & aplikasi lain bisa rusak. Sekarang domain tak dikenal dinilai AI dan hanya diblokir jika skornya tinggi.
+- **Daftar iklan Melolo lengkap:** Pangle (`pangle.io`, `i18n-pglstatp.com`, `tiktokpangle-*`), AppLovin, Moloco, InMobi, Vungle/Liftoff, Unity Ads, Mintegral, AdMob/IMA, Facebook Audience Network, AppsFlyer, Firebase Analytics, serta pemblokiran **HTTPDNS ByteDance** agar aplikasi tidak bisa melewati filter.
+- **Mode Agresif (opsional):** ikut memblokir telemetri `log.*` ByteDance. Matikan jika video gagal diputar.
+- **Dukungan DNS IPv6** (sebelumnya query IPv6 diabaikan sehingga koneksi bisa lambat), **cache DNS 60 detik**, dan VPN bisa dipulihkan otomatis oleh sistem / Always-on VPN.
+
+> ⚠️ Batasan: pemblokiran berbasis DNS tidak bisa menghapus iklan yang dikirim dari server yang sama dengan konten (misalnya `api.tmtreader.com`). Episode yang dikunci dengan "tonton iklan untuk membuka" mungkin tidak bisa dibuka karena iklannya terblokir.
+
 ## 🚀 Fitur Unggulan
 
-- **Mesin Anti-Iklan Berlapis (*Multi-Tier Ad Filter*):**
-  - Pemblokiran langsung di tingkat lokal (0 ms) untuk jaringan iklan populer: Pangle SDK (ByteDance), Google AdMob, DoubleClick, AppLovin, Unity Ads, Mintegral, Rayjump, Vungle, InMobi, Moloco, IronSource, dsb.
-  - Whitelist cerdas untuk memastikan API inti aplikasi, teks bab novel, cover buku, dan pemutar video drama tetap berjalan lancar tanpa terganggu.
-- **Lapisan Perlindungan Kedua (*Two-Tier Shield* Upstream):**
-  - Terintegrasi secara default dengan **AdGuard DNS** (`94.140.14.14` & `94.140.15.15`) untuk menangkal domain iklan varian baru dari server cloud.
-  - Tersedia opsi Upstream DNS lain: **Cloudflare Security (1.1.1.2)** dan **Google DNS (8.8.8.8)**.
-- **Kepatuhan Protokol DNS RFC & Caching:**
-  - Mendukung kueri IPv4 (tipe A $\rightarrow$ `0.0.0.0`), IPv6 (tipe AAAA $\rightarrow$ `::`), dan HTTPS/SVCB (`NODATA`).
-  - Cache TTL 300 detik untuk mencegah SDK iklan melakukan *spam retry*.
-- **Pilihan Cakupan Perlindungan (*Scope Mode*):**
-  - **Mode Global (Semua Aplikasi - Rekomendasi):** Melindungi seluruh sistem ponsel termasuk iklan mediasi di proses Google Play Services dan WebView.
-  - **Mode Khusus Melolo:** Menyaring paket khusus aplikasi Melolo dan layanan pendukungnya.
-- **Log Interaktif & Analisis AI:**
-  - Pantau kueri DNS yang diblokir atau diizinkan secara *real-time*.
-  - Tombol aksi cepat untuk menambah atau menghapus domain ke Whitelist / Blacklist kustom.
-- **Tips Anti-Bocor Terintegrasi:**
-  - Panduan cepat dan tombol akses instan ke pengaturan **DNS Pribadi (Private DNS)** Android agar tidak mem-bypass VPN.
+- **Mesin Anti-Iklan Berlapis:** blacklist/whitelist kustom → domain inti Melolo → basis pengetahuan iklan → AI Online → skor AI Lokal.
+- **Lapisan Perlindungan Kedua (Upstream):** AdGuard DNS (default), Cloudflare Security (1.1.1.2), atau Google DNS.
+- **Respon DNS sesuai RFC:** A → `0.0.0.0`, AAAA → `::`, HTTPS/SVCB → `NODATA`, TTL 300 detik agar SDK iklan tidak spam retry.
+- **Cakupan:** Mode Global (semua aplikasi) atau Mode Khusus Melolo.
+- **Log Interaktif:** setiap query DNS menampilkan label AI (kategori · skor) dan sumber keputusan; satu ketukan untuk blokir/izinkan.
+- **Tips Anti-Bocor:** pintasan ke pengaturan **DNS Pribadi (Private DNS)** Android.
 
 ---
 
 ## 📥 Unduh & Instalasi
 
-Anda dapat langsung mengunduh file APK yang sudah jadi:
-- [**MeloloAdBlocker.apk**](./MeloloAdBlocker.apk) (Langsung pasang di perangkat Android)
-
-Atau lakukan *build* sendiri dari sumber kode:
+Build dari sumber kode (Android Studio atau terminal):
 ```bash
 ./gradlew assembleDebug
 ```
 File APK akan dihasilkan di `app/build/outputs/apk/debug/MeloloAdBlocker.apk`.
+
+> File `MeloloAdBlocker.apk` di root repo adalah build versi lama (1.0). Build ulang untuk mendapatkan versi 2.0.
+
+Uji unit:
+```bash
+./gradlew testDebugUnitTest
+```
 
 ---
 

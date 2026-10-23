@@ -30,7 +30,11 @@ class DnsLogAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val log = logs[position]
         holder.tvDomainName.text = log.domain
-        holder.tvTimestamp.text = log.timestamp
+        holder.tvTimestamp.text = if (log.aiLabel.isNotEmpty()) {
+            "${log.timestamp} • ${log.aiLabel} • ${log.source}"
+        } else {
+            log.timestamp
+        }
 
         // Membuat background badge bulat secara dinamis
         val badgeDrawable = GradientDrawable().apply {
