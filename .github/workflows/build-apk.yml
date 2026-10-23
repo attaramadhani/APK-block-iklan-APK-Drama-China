@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,15 +26,25 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
-      - name: Unit tests
-        run: ./gradlew testDebugUnitTest
-        continue-on-error: true
-
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: MeloloAdBlocker-debug
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.0-build${{ github.run_number }}
+          name: Melolo AdBlocker v2.0.0 (build ${{ github.run_number }})
+          body: |
+            APK hasil build otomatis dari commit ${{ github.sha }}.
+            Unduh **MeloloAdBlocker.apk** di bawah lalu pasang di HP Android.
+          files: app/build/outputs/apk/debug/MeloloAdBlocker.apk
+          make_latest: true
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest
 
       - name: Upload test report
         if: always()
