@@ -52,7 +52,7 @@ Konsepnya dibalik: **bukan mencari iklan untuk diblokir, tetapi hanya membuka ge
 2. Unduh file **`MeloloAdBlocker.apk`** di bagian *Assets*.
 3. Buka file yang sudah diunduh, lalu tekan **Pasang**. Jika muncul peringatan, izinkan *"Instal dari sumber tidak dikenal"* untuk browser / pengelola file Anda.
 
-> ⚠️ **Sudah pernah memasang versi lama?** Hapus dulu aplikasi *Melolo AdBlocker* yang lama sebelum memasang versi baru. APK dari Releases ditandatangani dengan kunci berbeda, sehingga Android menolak memasangnya di atas versi lama ("Aplikasi tidak terpasang").
+> ⚠️ **Memasang versi v2.1.0-build5 atau lebih baru untuk pertama kali?** Hapus dulu aplikasi *Melolo AdBlocker* yang lama (sekali saja). Mulai build 5 semua APK memakai kunci tanda tangan yang sama, sehingga update berikutnya bisa langsung dipasang di atas versi lama.
 
 > File `MeloloAdBlocker.apk` di root repo adalah build lama (1.0). Gunakan APK dari halaman Releases.
 
